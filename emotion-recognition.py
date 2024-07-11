@@ -49,8 +49,9 @@ def walk_through_dir(directory_path):
 # print(f"Image width: {img.width}")
 # img.show()
 
-
-print(f"Cuda enable status: {torch.cuda.is_available()}")
+# Setting up training and inference device
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f"Cuda enable status: {device}")
 
 
 # Transform for training data
@@ -152,3 +153,85 @@ test_dataloader = DataLoader(dataset=test_data,
                              num_workers=os.cpu_count(),
                              shuffle=False)
 
+
+# Creating model architecture here:
+class custom_emotion_recognition(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+
+# Creating train step function for the training loop
+def train_step(model: torch.nn.Module,
+               dataloader: torch.utils.data.DataLoader,
+               loss_fn: torch.nn.Module,
+               optimizer: torch.optim.Optimizer,
+               device=device):
+    # Put the model in train mode
+    model.train()
+
+    # Setup training loss and training accuracy
+    train_loss, train_acc = 0, 0
+
+    # Loop through dataloader batches
+    for batch, (img, label) in enumerate(dataloader):
+        # Sending data to target device
+        img, label = img.to(device), label.to(device)
+
+        # Forward pass
+        y_pred = model(img)    # Output is raw values(raw model logits)
+
+        # Calculating loss:
+        loss = loss_fn(y_pred, label)
+        train_loss +=loss.item()
+
+        # Optimizer zero grad
+        optimizer.zero_grad()
+
+        # Loss backward
+        loss.backward()
+
+        # Optimizer step
+        optimizer.step()
+
+        # Calculate accuracy metric
+        y_pred_class = torch.argmax(torch.softmax(y_pred, dim=1), dim=1)
+        train_acc += (y_pred_class == label).sum().item()/len(y_pred)
+
+    # Adjust metrics to get average loss and accuracy pr batch
+    train_loss = train_loss/len(dataloader)
+    train_acc = train_acc/len(dataloader)
+    return train_loss, train_acc
+
+# Creating a test step function for training loop
+def test_step(model: torch.nn.Module,
+              dataloader: torch.unils.data.DataLoader,
+              loss_fn: torch.nn.Module,
+              device=device):
+    # Put model into evaluation mode
+    model.eval()
+
+    # Setup test loss and test accuracy values
+    test_loss, test_acc = 0, 0
+
+    # Turn on inference mode
+    with torch.inference_mode():
+        # Loop through dataloader batches
+        for batch, (img, label) in enumerate(dataloader):
+            # Putting the data to target device
+            img, label = img.to(device), label.to(device)
+
+            # Forward pass
+            test_pred_logits = model(img)
+
+            # Calculate the loss
+            loss = loss_fn(test_pred_logits, label)
+            test_loss += loss.item()
+
+            # Calculate the accuracy
+            test_pred_labels = test_pred_logits.argmax(dim=1)
+            test_acc += ((test_pred_labels == label).sum().item()/len(test_pred_labels))
+
+        # Adjust the loss and accuracy per batch
+        test_loss = test_loss/len(dataloader)
+        test_acc = test_acc/len(dataloader)
+        return test_loss, test_acc

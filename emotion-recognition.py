@@ -27,51 +27,6 @@ def walk_through_dir(directory_path):
     for dirpath, dirnames, filenames in os.walk(directory_path):
         print(f"There are {len(dirnames)}folders and {len(filenames)} images in {dirpath}")
 
-# walk_through_dir(TRAIN_DIR)
-
-# print(TRAIN_DIR)
-# print(TEST_DIR)0
-
-# random.seed(42)
-
-# image_path_list = list(DATA_PATH.glob("*/*/*.jpg"))
-# print(image_path_list[:10])
-
-# # Printing random image
-# random_image_path = random.choice(image_path_list)
-#
-# # Getting image class from path name
-# image_class = random_image_path.parent.stem
-#
-# # Open the image using pillow library
-# img = Image.open(random_image_path)
-
-# # Print metadata
-# print(f"Random image path: {random_image_path}")
-# print(f"Image class: {image_class}")
-# print(f"Image height: {img.height}")
-# print(f"Image width: {img.width}")
-# img.show()
-
-# Setting up training and inference device
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-print(f"Cuda enable status: {device}")
-
-
-# Transform for training data
-train_data_transform = transforms.Compose([
-    transforms.Resize(size=(128, 128)),
-    transforms.RandomHorizontalFlip(p=0.3),
-    transforms.ToTensor()
-])
-# Transform for testing data
-test_data_transform = transforms.Compose([
-    transforms.Resize(size=(128, 128)),
-    transforms.ToTensor()
-])
-
-# transformed_image = data_transform(img)
-# print(f"Transformed image shape: {transformed_image.shape}\nTransformed image data type{transformed_image.dtype}")
 
 def plot_transformed_images(image_paths: list,
                             transform,
@@ -101,62 +56,6 @@ def plot_transformed_images(image_paths: list,
             fig.suptitle(f"Class: {image_path.parent.stem}", fontsize=16)
             plt.show()
 
-# plot_transformed_images(image_paths = image_path_list,
-#                         transform=data_transform,
-#                         n=3)
-
-# Loading image data using torchvision.datasets.ImageFolder
-train_data = datasets.ImageFolder(root=TRAIN_DIR,
-                                  transform=train_data_transform,
-                                  target_transform=None)
-
-test_data = datasets.ImageFolder(root=TEST_DIR,
-                                 transform=test_data_transform,
-                                 target_transform=None)
-
-# print("TRAIN DATA: ")
-# print(train_data)
-# print("\nTEST DATA: ")
-# print(test_data)
-# print(f"Classes: {train_data.classes}")
-
-# Creating a dictionary to get classnames to integers
-# Classes: ['happy', 'neutral', 'sad']
-# Class dictionary: {'happy': 0, 'neutral': 1, 'sad': 2}
-class_names_dict = train_data.class_to_idx
-
-# {0: 'happy', 1: 'neutral', 2: 'sad'}
-idx_to_class = {v: k for k, v in class_names_dict.items()}
-
-
-
-# Checking training set image
-img, label = train_data[0][0], train_data[0][1]
-print(f"Train data image shape: {img.shape}")
-print(f"image dtype: {img.dtype}")
-print(f"Label datatype {label}: {type(label)}")
-
-# # Rearranging tensor object 'img' to display image using matplotlib
-# img_permuted = img.permute(1, 2, 0)
-# # plotting the image
-# plt.figure(figsize=(8, 6))
-# plt.imshow(img_permuted)
-# plt.axis('off')
-# plt.title(idx_to_class[label], fontsize=14)
-# plt.show()
-
-
-# Creating my dataloaders
-BATCH_SIZE=128
-train_dataloader = DataLoader(dataset=train_data,
-                              batch_size=BATCH_SIZE,
-                              num_workers=os.cpu_count(),
-                              shuffle=True)
-test_dataloader = DataLoader(dataset=test_data,
-                             batch_size=BATCH_SIZE,
-                             num_workers=os.cpu_count(),
-                             shuffle=False)
-
 
 # Creating model architecture here:
 class Custom_Emotion_Recognition(nn.Module):
@@ -173,7 +72,7 @@ class Custom_Emotion_Recognition(nn.Module):
         self.norm = nn.BatchNorm2d(10)
 
         self.fc1 = nn.Linear(810,50)
-        self.fc2 = nn.Linear(50,3)      # 3 for three output classes
+        self.fc2 = nn.Linear(50,3)      # 3 for three output classes (3 emotions)
 
         self.localization = nn.Sequential(
             nn.Conv2d(1, 8, kernel_size=7),
@@ -197,8 +96,10 @@ class Custom_Emotion_Recognition(nn.Module):
         xs = xs.view(-1, 640)
         theta = self.fc_loc(xs)
         theta = theta.view(-1, 2, 3)
-        grid = F.affine_grid(theta, x.size())
-        x = F.grid_sample(x, grid)
+        # grid = F.affine_grid(theta, x.size())
+        # x = F.grid_sample(x, grid)
+        grid = F.affine_grid(theta, x.size(), align_corners= True)      # added align_corners=True to remove warnings
+        x = F.grid_sample(x, grid, align_corners=True)                  # added align_corners=True to remove warnings
         return x
 
     def forward(self, input):
@@ -226,7 +127,7 @@ def train_step(model: torch.nn.Module,
                dataloader: torch.utils.data.DataLoader,
                loss_fn: torch.nn.Module,
                optimizer: torch.optim.Optimizer,
-               device=device):
+               device):
     # Put the model in train mode
     model.train()
 
@@ -267,7 +168,7 @@ def train_step(model: torch.nn.Module,
 def test_step(model: torch.nn.Module,
               dataloader: torch.utils.data.DataLoader,
               loss_fn: torch.nn.Module,
-              device=device):
+              device):
     # Put model into evaluation mode
     model.eval()
 
@@ -302,14 +203,15 @@ def train(model: torch.nn.Module,
           train_dataloader: torch.utils.data.DataLoader,
           test_dataloader: torch.utils.data.DataLoader,
           optimizer: torch.optim.Optimizer,
+          scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau,
           loss_fn: torch.nn.Module = nn.CrossEntropyLoss(),
-          device: str = 'cpu',
+          device: str = 'cuda',
           epochs: int = 5):
     # Creating empty result dictionary
     results = {"train_loss": [],
                "train_acc": [],
-               "val_loss": [],
-               "val_acc": []}
+               "test_loss": [],
+               "test_acc": []}
 
     # Looping through training and testing step
     for epoch in tqdm(range(epochs)):
@@ -330,18 +232,72 @@ def train(model: torch.nn.Module,
         # Print details
         print(f"\nEpoch: {epoch} | Train loss: {train_loss:0.4f} | Train acc: {train_acc*100:.2f}% | test loss: {test_loss:.4f} | test_acc: {test_acc*100:.2f}%")
 
+        scheduler.step(test_loss)
+
         results['train_loss'].append(train_loss)
         results['train_acc'].append(train_acc)
         results['test_loss'].append(test_loss)
         results['test_acc'].append(test_acc)
-        return results
+    return results
 
 
 if __name__ == '__main__':
     NUM_EPOCHS = 100
+    BATCH_SIZE = 128
+
+    # Setting up training and inference device
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"Cuda enable status: {device}")
+
+    # Transform for training data
+    train_data_transform = transforms.Compose([
+        # transforms.Resize(size=(128, 128)),
+        transforms.Grayscale(num_output_channels=1),
+        transforms.RandomHorizontalFlip(p=0.3),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,))
+    ])
+    # Transform for testing data
+    test_data_transform = transforms.Compose([
+        # transforms.Resize(size=(128, 128)),
+        transforms.Grayscale(num_output_channels=1),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,))
+    ])
+
+    train_data = datasets.ImageFolder(root=TRAIN_DIR,
+                                      transform=train_data_transform,
+                                      target_transform=None)
+
+    test_data = datasets.ImageFolder(root=TEST_DIR,
+                                     transform=test_data_transform,
+                                     target_transform=None)
+    # print(f"Classes: {train_data.classes}")
+
+    # Creating a dictionary to get classnames to integers
+    # Classes: ['happy', 'neutral', 'sad']
+    # Class dictionary: {'happy': 0, 'neutral': 1, 'sad': 2}
+    class_names_dict = train_data.class_to_idx
+
+    # {0: 'happy', 1: 'neutral', 2: 'sad'}
+    idx_to_class = {v: k for k, v in class_names_dict.items()}
+
+    # Checking training set image
+    img, label = train_data[0][0], train_data[0][1]
+    print(f"Train data image shape: {img.shape}")
+    print(f"image dtype: {img.dtype}")
+    print(f"Label datatype {label}: {type(label)}")
+
+    # # Rearranging tensor object 'img' to display image using matplotlib
+    # img_permuted = img.permute(1, 2, 0)
+    # # plotting the image
+    # plt.figure(figsize=(8, 6))
+    # plt.imshow(img_permuted)
+    # plt.axis('off')
+    # plt.title(idx_to_class[label], fontsize=14)
+    # plt.show()
 
     # Creating my dataloaders
-    BATCH_SIZE = 128
     train_dataloader = DataLoader(dataset=train_data,
                                   batch_size=BATCH_SIZE,
                                   num_workers=os.cpu_count(),
@@ -351,14 +307,22 @@ if __name__ == '__main__':
                                  num_workers=os.cpu_count(),
                                  shuffle=False)
 
+    print(f"Size of train loader: {len(train_dataloader)}")
+    print(f"Size of test loader: {len(test_dataloader)}")
+
     # Creating model instance
-    emotion_model_v1 = Custom_Emotion_Recognition()
+    emotion_model_v1 = Custom_Emotion_Recognition().to(device)
 
     # Training Loop:
     # Setting loss function and optimizer
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(params=emotion_model_v1.parameters(),
                                  lr=0.005)
+
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
+                                                           mode='min',
+                                                           factor=0.1,
+                                                           patience=3)
 
     # Training start time
     start_time = timer()
@@ -368,10 +332,18 @@ if __name__ == '__main__':
                                      train_dataloader=train_dataloader,
                                      test_dataloader=test_dataloader,
                                      optimizer=optimizer,
+                                     scheduler=scheduler,
                                      loss_fn=loss_fn,
                                      epochs=NUM_EPOCHS,
                                      device=device)
 
     # Training end time
     end_time = timer()
-    print(f"Total training time: {((end_time - start_time) / 60) / 60} hrs")
+    print(f"Total training time: {round((((end_time - start_time) / 60) / 60), 3)} hrs")
+
+    # Saving the model
+    current_dir = os.getcwd()
+    model_file = "emotion_model_v1_state_dict.pth"
+    model_save_path = os.path.join(current_dir, model_file)
+    torch.save(emotion_model_v1.state_dict(), model_save_path)
+# END OF MAIN

@@ -58,21 +58,142 @@ def plot_transformed_images(image_paths: list,
 
 
 # Creating model architecture here:
+# class Custom_Emotion_Recognition(nn.Module):
+#     def __init__(self):
+#         super(Custom_Emotion_Recognition, self).__init__()
+#         self.conv1 = nn.Conv2d(1,10,3)
+#         self.conv2 = nn.Conv2d(10,10,3)
+#         self.pool2 = nn.MaxPool2d(2,2)
+#
+#         self.conv3 = nn.Conv2d(10,10,3)
+#         self.conv4 = nn.Conv2d(10,10,3)
+#         self.pool4 = nn.MaxPool2d(2,2)
+#
+#         self.norm = nn.BatchNorm2d(10)
+#
+#         self.fc1 = nn.Linear(810,50)
+#         self.fc2 = nn.Linear(50,3)      # 3 for three output classes (3 emotions)
+#
+#         self.localization = nn.Sequential(
+#             nn.Conv2d(1, 8, kernel_size=7),
+#             nn.MaxPool2d(2, stride=2),
+#             nn.ReLU(True),
+#             nn.Conv2d(8, 10, kernel_size=5),
+#             nn.MaxPool2d(2, stride=2),
+#             nn.ReLU(True)
+#         )
+#
+#         self.fc_loc = nn.Sequential(
+#             nn.Linear(640, 32),
+#             nn.ReLU(True),
+#             nn.Linear(32, 3*2)
+#         )
+#         self.fc_loc[2].weight.data.zero_()
+#         self.fc_loc[2].bias.data.copy_(torch.tensor([1,0,0,0,1,0], dtype=torch.float))
+#
+#     def stn(self, x):
+#         xs = self.localization(x)
+#         xs = xs.view(-1, 640)
+#         theta = self.fc_loc(xs)
+#         theta = theta.view(-1, 2, 3)
+#         # grid = F.affine_grid(theta, x.size())
+#         # x = F.grid_sample(x, grid)
+#         grid = F.affine_grid(theta, x.size(), align_corners= True)      # added align_corners=True to remove warnings
+#         x = F.grid_sample(x, grid, align_corners=True)                  # added align_corners=True to remove warnings
+#         return x
+#
+#     def forward(self, input):
+#         out = self.stn(input)
+#
+#         out = F.relu(self.conv1(out))
+#         out = self.conv2(out)
+#         out = F.relu(self.pool2(out))
+#
+#         out = F.relu(self.conv3(out))
+#         out = self.norm(self.conv4(out))
+#         out = F.relu(self.pool4(out))
+#
+#         out = F.dropout(out)
+#         out = out.view(-1, 810)
+#         out = F.relu(self.fc1(out))
+#         out = self.fc2(out)
+#
+#         return out
+# class Custom_Emotion_Recognition(nn.Module):
+#     def __init__(self):
+#         super(Custom_Emotion_Recognition, self).__init__()
+#         self.conv1 = nn.Conv2d(1, 10, 3)
+#         self.conv2 = nn.Conv2d(10, 10, 3)
+#         self.pool2 = nn.MaxPool2d(2, 2)
+#
+#         self.conv3 = nn.Conv2d(10, 10, 3)
+#         self.conv4 = nn.Conv2d(10, 10, 3)
+#         self.pool4 = nn.MaxPool2d(2, 2)
+#
+#         self.norm = nn.BatchNorm2d(10)
+#
+#         self.fc1 = nn.Linear(8410, 50)  # Adjusted input size after conv and pooling layers
+#         self.fc2 = nn.Linear(50, 3)  # 3 for three output classes
+#
+#         self.localization = nn.Sequential(
+#             nn.Conv2d(1, 8, kernel_size=7),
+#             nn.MaxPool2d(2, stride=2),
+#             nn.ReLU(True),
+#             nn.Conv2d(8, 10, kernel_size=5),
+#             nn.MaxPool2d(2, stride=2),
+#             nn.ReLU(True)
+#         )
+#
+#         self.fc_loc = nn.Sequential(
+#             nn.Linear(10 * 28 * 28, 32),  # Adjusted to match the expected input size
+#             nn.ReLU(True),
+#             nn.Linear(32, 3 * 2)
+#         )
+#         self.fc_loc[2].weight.data.zero_()
+#         self.fc_loc[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
+#
+#     def stn(self, x):
+#         xs = self.localization(x)
+#         xs = xs.view(-1, 10 * 28 * 28)  # Adjusted to match the expected input size
+#         theta = self.fc_loc(xs)
+#         theta = theta.view(-1, 2, 3)
+#         grid = F.affine_grid(theta, x.size(), align_corners=True)
+#         x = F.grid_sample(x, grid, align_corners=True)
+#         return x
+#
+#     def forward(self, input):
+#         out = self.stn(input)
+#
+#         out = F.relu(self.conv1(out))
+#         out = self.conv2(out)
+#         out = F.relu(self.pool2(out))
+#
+#         out = F.relu(self.conv3(out))
+#         out = self.norm(self.conv4(out))
+#         out = F.relu(self.pool4(out))
+#
+#         out = F.dropout(out)
+#         out = out.view(out.size(0), -1)
+#         out = F.relu(self.fc1(out))
+#         out = self.fc2(out)
+#
+#         return out
+
 class Custom_Emotion_Recognition(nn.Module):
     def __init__(self):
         super(Custom_Emotion_Recognition, self).__init__()
-        self.conv1 = nn.Conv2d(1,10,3)
-        self.conv2 = nn.Conv2d(10,10,3)
-        self.pool2 = nn.MaxPool2d(2,2)
+        self.conv1 = nn.Conv2d(1, 16, 3)
+        self.conv2 = nn.Conv2d(16, 32, 3)
+        self.pool2 = nn.MaxPool2d(2, 2)
 
-        self.conv3 = nn.Conv2d(10,10,3)
-        self.conv4 = nn.Conv2d(10,10,3)
-        self.pool4 = nn.MaxPool2d(2,2)
+        self.conv3 = nn.Conv2d(32, 64, 3)
+        self.conv4 = nn.Conv2d(64, 64, 3)
+        self.pool4 = nn.MaxPool2d(2, 2)
 
-        self.norm = nn.BatchNorm2d(10)
+        self.norm = nn.BatchNorm2d(64)
 
-        self.fc1 = nn.Linear(810,50)
-        self.fc2 = nn.Linear(50,3)      # 3 for three output classes (3 emotions)
+        self.fc1 = nn.Linear(18496, 256)  # Adjusted input size after conv and pooling layers
+        self.fc2 = nn.Linear(256, 3)  # 3 for three output classes
 
         self.localization = nn.Sequential(
             nn.Conv2d(1, 8, kernel_size=7),
@@ -84,22 +205,26 @@ class Custom_Emotion_Recognition(nn.Module):
         )
 
         self.fc_loc = nn.Sequential(
-            nn.Linear(640, 32),
+            nn.Linear(10 * 28 * 28, 32),  # Adjusted to match the expected input size
             nn.ReLU(True),
-            nn.Linear(32, 3*2)
+            nn.Linear(32, 3 * 2)
         )
         self.fc_loc[2].weight.data.zero_()
-        self.fc_loc[2].bias.data.copy_(torch.tensor([1,0,0,0,1,0], dtype=torch.float))
+        self.fc_loc[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
 
     def stn(self, x):
+        """
+        # Spatial Transformation Network: Extract features through additional
+        output channels
+        :param x:
+        :return:
+        """
         xs = self.localization(x)
-        xs = xs.view(-1, 640)
+        xs = xs.view(-1, 10 * 28 * 28)  # Adjusted to match the expected input size
         theta = self.fc_loc(xs)
         theta = theta.view(-1, 2, 3)
-        # grid = F.affine_grid(theta, x.size())
-        # x = F.grid_sample(x, grid)
-        grid = F.affine_grid(theta, x.size(), align_corners= True)      # added align_corners=True to remove warnings
-        x = F.grid_sample(x, grid, align_corners=True)                  # added align_corners=True to remove warnings
+        grid = F.affine_grid(theta, x.size(), align_corners=True)
+        x = F.grid_sample(x, grid, align_corners=True)
         return x
 
     def forward(self, input):
@@ -114,7 +239,7 @@ class Custom_Emotion_Recognition(nn.Module):
         out = F.relu(self.pool4(out))
 
         out = F.dropout(out)
-        out = out.view(-1, 810)
+        out = out.view(out.size(0), -1)
         out = F.relu(self.fc1(out))
         out = self.fc2(out)
 
@@ -251,7 +376,7 @@ if __name__ == '__main__':
 
     # Transform for training data
     train_data_transform = transforms.Compose([
-        # transforms.Resize(size=(128, 128)),
+        transforms.Resize(size=(128, 128)),
         transforms.Grayscale(num_output_channels=1),
         transforms.RandomHorizontalFlip(p=0.3),
         transforms.ToTensor(),
@@ -259,7 +384,7 @@ if __name__ == '__main__':
     ])
     # Transform for testing data
     test_data_transform = transforms.Compose([
-        # transforms.Resize(size=(128, 128)),
+        transforms.Resize(size=(128, 128)),
         transforms.Grayscale(num_output_channels=1),
         transforms.ToTensor(),
         transforms.Normalize((0.5,), (0.5,))
@@ -317,7 +442,7 @@ if __name__ == '__main__':
     # Setting loss function and optimizer
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(params=emotion_model_v1.parameters(),
-                                 lr=0.005)
+                                 lr=0.0005)
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            mode='min',

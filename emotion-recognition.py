@@ -1,5 +1,6 @@
 import os
 import random
+import sys
 from pathlib import Path
 from PIL import Image
 import torch
@@ -119,21 +120,23 @@ def plot_transformed_images(image_paths: list,
 #         out = self.fc2(out)
 #
 #         return out
+
+
 # class Custom_Emotion_Recognition(nn.Module):
 #     def __init__(self):
 #         super(Custom_Emotion_Recognition, self).__init__()
-#         self.conv1 = nn.Conv2d(1, 10, 3)
-#         self.conv2 = nn.Conv2d(10, 10, 3)
+#         self.conv1 = nn.Conv2d(1, 32, 3)
+#         self.conv2 = nn.Conv2d(32, 32, 3)
 #         self.pool2 = nn.MaxPool2d(2, 2)
 #
-#         self.conv3 = nn.Conv2d(10, 10, 3)
-#         self.conv4 = nn.Conv2d(10, 10, 3)
+#         self.conv3 = nn.Conv2d(32, 64, 3)
+#         self.conv4 = nn.Conv2d(64, 64, 3)
 #         self.pool4 = nn.MaxPool2d(2, 2)
 #
-#         self.norm = nn.BatchNorm2d(10)
+#         self.norm = nn.BatchNorm2d(64)
 #
-#         self.fc1 = nn.Linear(8410, 50)  # Adjusted input size after conv and pooling layers
-#         self.fc2 = nn.Linear(50, 3)  # 3 for three output classes
+#         self.fc1 = nn.Linear(64 * 29 * 29, 256)  # Adjusted input size after conv and pooling layers
+#         self.fc2 = nn.Linear(256, 3)  # 3 for three output classes
 #
 #         self.localization = nn.Sequential(
 #             nn.Conv2d(1, 8, kernel_size=7),
@@ -153,6 +156,12 @@ def plot_transformed_images(image_paths: list,
 #         self.fc_loc[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
 #
 #     def stn(self, x):
+#         """
+#         # Spatial Transformation Network: Extract features through additional
+#         output channels
+#         :param x:
+#         :return:
+#         """
 #         xs = self.localization(x)
 #         xs = xs.view(-1, 10 * 28 * 28)  # Adjusted to match the expected input size
 #         theta = self.fc_loc(xs)
@@ -174,6 +183,7 @@ def plot_transformed_images(image_paths: list,
 #
 #         out = F.dropout(out)
 #         out = out.view(out.size(0), -1)
+#         # print(f"Shape before FC1: {out.shape}")
 #         out = F.relu(self.fc1(out))
 #         out = self.fc2(out)
 #
@@ -182,17 +192,21 @@ def plot_transformed_images(image_paths: list,
 class Custom_Emotion_Recognition(nn.Module):
     def __init__(self):
         super(Custom_Emotion_Recognition, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, 3)
-        self.conv2 = nn.Conv2d(16, 32, 3)
+        self.conv1 = nn.Conv2d(1, 32, 3)
+        self.conv2 = nn.Conv2d(32, 32, 3)
         self.pool2 = nn.MaxPool2d(2, 2)
 
         self.conv3 = nn.Conv2d(32, 64, 3)
         self.conv4 = nn.Conv2d(64, 64, 3)
         self.pool4 = nn.MaxPool2d(2, 2)
 
-        self.norm = nn.BatchNorm2d(64)
+        self.conv5 = nn.Conv2d(64, 128, 3)
+        self.conv6 = nn.Conv2d(128, 128, 3)
+        self.pool6 = nn.MaxPool2d(2, 2)
 
-        self.fc1 = nn.Linear(18496, 256)  # Adjusted input size after conv and pooling layers
+        self.norm = nn.BatchNorm2d(128)
+
+        self.fc1 = nn.Linear(128 * 12 * 12, 256)  # Adjusted input size after conv and pooling layers
         self.fc2 = nn.Linear(256, 3)  # 3 for three output classes
 
         self.localization = nn.Sequential(
@@ -213,12 +227,6 @@ class Custom_Emotion_Recognition(nn.Module):
         self.fc_loc[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
 
     def stn(self, x):
-        """
-        # Spatial Transformation Network: Extract features through additional
-        output channels
-        :param x:
-        :return:
-        """
         xs = self.localization(x)
         xs = xs.view(-1, 10 * 28 * 28)  # Adjusted to match the expected input size
         theta = self.fc_loc(xs)
@@ -231,12 +239,16 @@ class Custom_Emotion_Recognition(nn.Module):
         out = self.stn(input)
 
         out = F.relu(self.conv1(out))
-        out = self.conv2(out)
-        out = F.relu(self.pool2(out))
+        out = F.relu(self.conv2(out))
+        out = self.pool2(out)
 
         out = F.relu(self.conv3(out))
-        out = self.norm(self.conv4(out))
-        out = F.relu(self.pool4(out))
+        out = F.relu(self.conv4(out))
+        out = self.pool4(out)
+
+        out = F.relu(self.conv5(out))
+        out = F.relu(self.conv6(out))
+        out = self.norm(self.pool6(out))
 
         out = F.dropout(out)
         out = out.view(out.size(0), -1)
@@ -244,7 +256,6 @@ class Custom_Emotion_Recognition(nn.Module):
         out = self.fc2(out)
 
         return out
-
 
 
 # Creating train step function for the training loop
@@ -338,37 +349,41 @@ def train(model: torch.nn.Module,
                "test_loss": [],
                "test_acc": []}
 
-    # Looping through training and testing step
-    for epoch in tqdm(range(epochs)):
-        train_loss, train_acc = train_step(
-            model=model,
-            dataloader=train_dataloader,
-            loss_fn=loss_fn,
-            optimizer=optimizer,
-            device=device
-        )
-        test_loss, test_acc = test_step(
-            model=model,
-            dataloader=test_dataloader,
-            loss_fn=loss_fn,
-            device=device
-        )
+    try:
+        # Looping through training and testing step
+        for epoch in tqdm(range(epochs)):
+            train_loss, train_acc = train_step(
+                model=model,
+                dataloader=train_dataloader,
+                loss_fn=loss_fn,
+                optimizer=optimizer,
+                device=device
+            )
+            test_loss, test_acc = test_step(
+                model=model,
+                dataloader=test_dataloader,
+                loss_fn=loss_fn,
+                device=device
+            )
 
-        # Print details
-        print(f"\nEpoch: {epoch} | Train loss: {train_loss:0.4f} | Train acc: {train_acc*100:.2f}% | test loss: {test_loss:.4f} | test_acc: {test_acc*100:.2f}%")
+            # Print details
+            print(f"\nEpoch: {epoch} | Train loss: {train_loss:0.4f} | Train acc: {train_acc*100:.2f}% | test loss: {test_loss:.4f} | test_acc: {test_acc*100:.2f}%")
 
-        scheduler.step(test_loss)
+            scheduler.step(test_loss)
 
-        results['train_loss'].append(train_loss)
-        results['train_acc'].append(train_acc)
-        results['test_loss'].append(test_loss)
-        results['test_acc'].append(test_acc)
-    return results
+            results['train_loss'].append(train_loss)
+            results['train_acc'].append(train_acc)
+            results['test_loss'].append(test_loss)
+            results['test_acc'].append(test_acc)
+        return results
+    except KeyboardInterrupt:
+        print("\nTraining interrupted. Exiting gracefully . . . ")
+        sys.exit(0)
 
 
 if __name__ == '__main__':
     NUM_EPOCHS = 100
-    BATCH_SIZE = 128
+    BATCH_SIZE = 64
 
     # Setting up training and inference device
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -378,7 +393,7 @@ if __name__ == '__main__':
     train_data_transform = transforms.Compose([
         transforms.Resize(size=(128, 128)),
         transforms.Grayscale(num_output_channels=1),
-        transforms.RandomHorizontalFlip(p=0.3),
+        transforms.RandomHorizontalFlip(p=0.4),
         transforms.ToTensor(),
         transforms.Normalize((0.5,), (0.5,))
     ])
@@ -442,7 +457,7 @@ if __name__ == '__main__':
     # Setting loss function and optimizer
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(params=emotion_model_v1.parameters(),
-                                 lr=0.0005)
+                                 lr=0.0005, weight_decay=1e-3)
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            mode='min',

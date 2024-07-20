@@ -188,47 +188,59 @@ def plot_transformed_images(image_paths: list,
 #         out = self.fc2(out)
 #
 #         return out
-
 class Custom_Emotion_Recognition(nn.Module):
     def __init__(self):
         super(Custom_Emotion_Recognition, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3)
-        self.conv2 = nn.Conv2d(32, 32, 3)
-        self.pool2 = nn.MaxPool2d(2, 2)
+        # Initial Convolution and Pooling Layers
+        self.conv1 = nn.Conv2d(1, 32, 3)  # Output: (126, 126)
+        self.conv2 = nn.Conv2d(32, 64, 3)  # Output: (124, 124)
+        self.pool2 = nn.MaxPool2d(2, 2)    # Output: (62, 62)
 
-        self.conv3 = nn.Conv2d(32, 64, 3)
-        self.conv4 = nn.Conv2d(64, 64, 3)
-        self.pool4 = nn.MaxPool2d(2, 2)
+        self.conv3 = nn.Conv2d(64, 128, 3)  # Output: (60, 60)
+        self.conv4 = nn.Conv2d(128, 256, 3)  # Output: (58, 58)
+        self.pool4 = nn.MaxPool2d(2, 2)    # Output: (29, 29)
 
-        self.conv5 = nn.Conv2d(64, 128, 3)
-        self.conv6 = nn.Conv2d(128, 128, 3)
-        self.pool6 = nn.MaxPool2d(2, 2)
+        # Gradual Increase in Filters
+        self.conv5 = nn.Conv2d(256, 256, 3)  # Output: (27, 27)
+        self.conv6 = nn.Conv2d(256, 512, 3)  # Output: (25, 25)
+        self.pool6 = nn.MaxPool2d(2, 2)    # Output: (12, 12)
 
-        self.norm = nn.BatchNorm2d(128)
+        # Additional Convolution and Pooling Layers with Gradual Increase
+        self.conv7 = nn.Conv2d(512, 512, 3)  # Output: (10, 10)
+        self.pool7 = nn.MaxPool2d(2, 2)    # Output: (5, 5)
 
-        self.fc1 = nn.Linear(128 * 12 * 12, 256)  # Adjusted input size after conv and pooling layers
-        self.fc2 = nn.Linear(256, 3)  # 3 for three output classes
+        self.conv8 = nn.Conv2d(512, 256, 3)  # Output: (3, 3) after convolution
+        self.pool8 = nn.MaxPool2d(2, 2)    # Output: (1, 1)
 
+        # Batch Normalization Layer
+        self.norm = nn.BatchNorm2d(256)
+
+        # Fully Connected Layers
+        self.fc1 = nn.Linear(256 * 1 * 1, 128)  # Adjusted input size
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, 3)  # 3 for three output classes
+
+        # Spatial Transformer Network (STN) Layers
         self.localization = nn.Sequential(
-            nn.Conv2d(1, 8, kernel_size=7),
-            nn.MaxPool2d(2, stride=2),
+            nn.Conv2d(1, 16, kernel_size=7),  # Output: (122, 122)
+            nn.MaxPool2d(2, stride=2),    # Output: (61, 61)
             nn.ReLU(True),
-            nn.Conv2d(8, 10, kernel_size=5),
-            nn.MaxPool2d(2, stride=2),
+            nn.Conv2d(16, 32, kernel_size=5),  # Output: (57, 57)
+            nn.MaxPool2d(2, stride=2),    # Output: (28, 28)
             nn.ReLU(True)
         )
 
         self.fc_loc = nn.Sequential(
-            nn.Linear(10 * 28 * 28, 32),  # Adjusted to match the expected input size
+            nn.Linear(32 * 28 * 28, 128),  # Adjusted size
             nn.ReLU(True),
-            nn.Linear(32, 3 * 2)
+            nn.Linear(128, 6)
         )
         self.fc_loc[2].weight.data.zero_()
         self.fc_loc[2].bias.data.copy_(torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float))
 
     def stn(self, x):
         xs = self.localization(x)
-        xs = xs.view(-1, 10 * 28 * 28)  # Adjusted to match the expected input size
+        xs = xs.view(-1, 32 * 28 * 28)  # Adjusted to match the expected input size
         theta = self.fc_loc(xs)
         theta = theta.view(-1, 2, 3)
         grid = F.affine_grid(theta, x.size(), align_corners=True)
@@ -248,12 +260,18 @@ class Custom_Emotion_Recognition(nn.Module):
 
         out = F.relu(self.conv5(out))
         out = F.relu(self.conv6(out))
-        out = self.norm(self.pool6(out))
+        out = self.pool6(out)
 
-        out = F.dropout(out)
+        out = F.relu(self.conv7(out))
+        out = F.relu(self.conv8(out))
+        out = self.pool8(out)
+
+        out = self.norm(out)
+        out = F.dropout(out, p=0.5)
         out = out.view(out.size(0), -1)
         out = F.relu(self.fc1(out))
-        out = self.fc2(out)
+        out = F.relu(self.fc2(out))
+        out = self.fc3(out)
 
         return out
 
@@ -457,11 +475,11 @@ if __name__ == '__main__':
     # Setting loss function and optimizer
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(params=emotion_model_v1.parameters(),
-                                 lr=0.0005, weight_decay=1e-3)
+                                 lr=0.001, weight_decay=1e-2)
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
                                                            mode='min',
-                                                           factor=0.1,
+                                                           factor=0.01,
                                                            patience=3)
 
     # Training start time
